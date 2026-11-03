@@ -1,0 +1,10 @@
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS session_version INT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+    user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

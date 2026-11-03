@@ -1,0 +1,9 @@
+{
+  "name": "Mkulima Connect",
+  "short_name": "Mkulima",
+  "description": "Connect farmers, buyers, and produce services.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f5ee",
+  "theme_color": "#2f7d32"
+}

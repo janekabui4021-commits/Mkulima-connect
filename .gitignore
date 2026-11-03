@@ -1,0 +1,11 @@
+backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/*.db
+backend/*.db.bak
+backend/private_uploads/
+backend/product_images/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
