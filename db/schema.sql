@@ -10,6 +10,9 @@ CREATE TABLE users (
     password_hash TEXT NOT NULL,
     role user_role NOT NULL,
     phone_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    account_status TEXT NOT NULL DEFAULT 'active' CHECK (
+        account_status IN ('active', 'suspended', 'pending', 'disabled')
+    ),
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -23,6 +26,7 @@ CREATE TABLE farms (
     rating NUMERIC(2, 1) DEFAULT 4.5,
     delivery_days INT DEFAULT 2,
     status verify_status DEFAULT 'pending',
+    admin_suspended BOOLEAN NOT NULL DEFAULT FALSE,
     verified_at TIMESTAMPTZ,
     latitude NUMERIC(9, 6),
     longitude NUMERIC(9, 6),
@@ -80,6 +84,8 @@ CREATE TABLE products (
     farm_id INT REFERENCES farms(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT 'Other',
+    variety TEXT NOT NULL DEFAULT 'Standard',
     unit TEXT DEFAULT 'kg',
     price_kes NUMERIC(10, 2) NOT NULL,
     stock NUMERIC NOT NULL,
@@ -90,6 +96,7 @@ CREATE TABLE products (
     season_tier TEXT NOT NULL DEFAULT 'in_season' CHECK (
         season_tier IN ('early', 'peak', 'late', 'in_season')
     ),
+    admin_suspended BOOLEAN NOT NULL DEFAULT FALSE,
     trace_code TEXT NOT NULL UNIQUE
         DEFAULT md5(random()::text || clock_timestamp()::text)
 );
@@ -108,6 +115,7 @@ CREATE TABLE farmer_groups (
     topic TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     created_by INT NOT NULL REFERENCES users(id),
+    admin_suspended BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -149,6 +157,25 @@ CREATE TABLE notifications (
     body TEXT NOT NULL,
     read_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE marketplace_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL
+);
+
+CREATE TABLE content_reports (
+    id SERIAL PRIMARY KEY,
+    reporter_id INT NOT NULL REFERENCES users(id),
+    target_type TEXT NOT NULL CHECK (target_type IN ('product', 'user', 'group')),
+    target_id INT NOT NULL,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (
+        status IN ('open', 'reviewed', 'actioned', 'dismissed')
+    ),
+    admin_note TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE price_alerts (
@@ -266,12 +293,30 @@ CREATE TABLE buyer_crop_demands (
     id SERIAL PRIMARY KEY,
     buyer_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     crop_name TEXT NOT NULL,
+    variety TEXT NOT NULL DEFAULT '',
     county TEXT NOT NULL,
     min_quantity NUMERIC NOT NULL CHECK (min_quantity > 0),
     unit TEXT NOT NULL,
+    request_type TEXT NOT NULL DEFAULT 'preorder' CHECK (
+        request_type IN ('bulk', 'preorder')
+    ),
+    recurrence TEXT NOT NULL DEFAULT 'one_off' CHECK (
+        recurrence IN ('one_off', 'weekly', 'monthly')
+    ),
     harvest_from DATE,
     harvest_to DATE,
+    needed_by DATE,
     max_price_kes NUMERIC,
+    delivery_location TEXT NOT NULL DEFAULT '',
+    delivery_method TEXT NOT NULL DEFAULT 'delivery' CHECK (
+        delivery_method IN ('pickup', 'delivery')
+    ),
+    quality_notes TEXT NOT NULL DEFAULT '',
+    buyer_name TEXT NOT NULL DEFAULT '',
+    business_name TEXT NOT NULL DEFAULT '',
+    buyer_phone TEXT NOT NULL DEFAULT '',
+    buyer_email TEXT NOT NULL DEFAULT '',
+    farm_id INT REFERENCES farms(id),
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (harvest_to IS NULL OR harvest_from IS NULL OR harvest_to >= harvest_from),
@@ -308,6 +353,33 @@ CREATE INDEX idx_offtake_contracts_farmer
 CREATE INDEX idx_offtake_contracts_reservations
     ON offtake_contracts (product_id, status);
 
+CREATE TABLE offtake_quotes (
+    id SERIAL PRIMARY KEY,
+    demand_id INT NOT NULL REFERENCES buyer_crop_demands(id) ON DELETE CASCADE,
+    farmer_id INT NOT NULL REFERENCES users(id),
+    farm_id INT NOT NULL REFERENCES farms(id),
+    product_id INT REFERENCES products(id),
+    quantity NUMERIC NOT NULL CHECK (quantity > 0),
+    unit TEXT NOT NULL,
+    unit_price_kes NUMERIC NOT NULL CHECK (unit_price_kes > 0),
+    quality_notes TEXT NOT NULL DEFAULT '',
+    delivery_location TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'quoted' CHECK (
+        status IN ('quoted', 'countered', 'accepted', 'declined',
+                   'cancelled', 'fulfilled', 'expired')
+    ),
+    order_id INT REFERENCES orders(id),
+    supersedes_quote_id INT REFERENCES offtake_quotes(id),
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_offtake_quotes_demand
+    ON offtake_quotes (demand_id, status, created_at);
+CREATE INDEX idx_offtake_quotes_farmer
+    ON offtake_quotes (farmer_id, status, created_at);
+
 CREATE TABLE reviews (
     id SERIAL PRIMARY KEY,
     order_item_id INT NOT NULL UNIQUE REFERENCES order_items(id) ON DELETE CASCADE,
@@ -315,8 +387,19 @@ CREATE TABLE reviews (
     farm_id INT NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
     quality_rating INT NOT NULL CHECK (quality_rating BETWEEN 1 AND 5),
     delivery_speed_rating INT NOT NULL CHECK (delivery_speed_rating BETWEEN 1 AND 5),
+    rating NUMERIC,
     comment TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE INDEX idx_reviews_farm ON reviews (farm_id, id);
+
+CREATE TABLE admin_audit_logs (
+    id SERIAL PRIMARY KEY,
+    admin_id INT NOT NULL REFERENCES users(id),
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id INT,
+    details TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -5,7 +5,7 @@
   --mut: #5f6b60;
   --g: #2f7d32;
   --gl: #e4f1e1;
-  --ac: #f2a516;
+  --ac: #b7e4c7;
   --bd: #e1ded0;
 }
 
@@ -17,6 +17,7 @@
     --mut: #a3b0a4;
     --g: #5fbf63;
     --gl: #24392a;
+    --ac: #b7e4c7;
     --bd: #2c3b2f;
   }
 }
@@ -398,7 +399,7 @@ main {
   border: 1px solid var(--bd);
   border-radius: 24px;
   background:
-    radial-gradient(ellipse at 82% 18%, #f6d99088, transparent 35%),
+    radial-gradient(ellipse at 82% 18%, #b7e4c788, transparent 35%),
     linear-gradient(135deg, var(--card), var(--gl));
 }
 
@@ -454,7 +455,7 @@ main {
   min-height: 300px;
   overflow: hidden;
   border-radius: 22px;
-  background: linear-gradient(180deg, #cbe8dc 0%, #f5e8bc 74%, #b8d28e 100%);
+  background: linear-gradient(180deg, #cbe8dc 0%, #e4f1e1 74%, #b8d28e 100%);
 }
 
 .landing-sun {
@@ -464,8 +465,8 @@ main {
   width: 70px;
   height: 70px;
   border-radius: 50%;
-  background: #f4bc4e;
-  box-shadow: 0 0 0 14px #f4bc4e33;
+  background: #b7e4c7;
+  box-shadow: 0 0 0 14px #b7e4c733;
 }
 
 .landing-field {
@@ -565,7 +566,7 @@ main {
   background: var(--card);
 }
 
-.landing-trust article > span {
+.landing-trust-icon {
   display: grid;
   flex: 0 0 34px;
   width: 34px;
@@ -613,11 +614,25 @@ main {
   background: var(--card);
 }
 
-.landing-feature-card > span {
+.landing-feature-icon {
+  display: grid;
   flex: 0 0 36px;
-  font-size: 24px;
-  line-height: 1.3;
-  text-align: center;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--gl);
+  color: var(--g);
+}
+
+.landing-join-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.landing-button-icon {
+  flex: 0 0 auto;
 }
 
 .landing-feature-card h3 {
@@ -780,8 +795,8 @@ main {
 }
 
 .market-product-card .verification-badge.provisional {
-  background: #fff3d6;
-  color: #805600;
+  background: #e4f1e1;
+  color: #26712d;
 }
 
 .market-filter {
@@ -1183,8 +1198,8 @@ main {
 }
 
 .badge.p {
-  background: #fdeccb;
-  color: #8a5a00;
+  background: #e4f1e1;
+  color: #26712d;
 }
 
 input,
@@ -1558,8 +1573,8 @@ textarea {
 }
 
 .freshness-result.moderate {
-  background: #fff3d6;
-  color: #704b00;
+  background: #e4f1e1;
+  color: #26712d;
 }
 
 .freshness-result.critical {
@@ -1657,7 +1672,7 @@ textarea {
   overflow: hidden;
   padding: clamp(26px, 4vw, 42px);
   background:
-    radial-gradient(ellipse at 78% 72%, #f2a51633, transparent 34%),
+    radial-gradient(ellipse at 78% 72%, #b7e4c755, transparent 34%),
     linear-gradient(145deg, var(--gl), var(--card));
 }
 
@@ -2051,8 +2066,8 @@ textarea {
 }
 
 .badge.moderate {
-  background: #fff3d6;
-  color: #704b00;
+  background: #e4f1e1;
+  color: #26712d;
 }
 
 .badge.critical {

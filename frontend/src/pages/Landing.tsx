@@ -1,4 +1,18 @@
 import { useEffect, useState } from "react";
+import {
+  BadgeCheck,
+  Handshake,
+  MapPin,
+  MessageCircle,
+  PackageCheck,
+  QrCode,
+  ShieldCheck,
+  ShoppingBasket,
+  Sprout,
+  Star,
+  Tag,
+  Wheat,
+} from "lucide-react";
 import { getProducts } from "../api";
 import type { Product } from "../api";
 import ProductImage from "../ProductImage";
@@ -96,21 +110,27 @@ export default function Landing({
           </div>
         </div>
         <article>
-          <span aria-hidden="true">✓</span>
+          <span className="landing-trust-icon" aria-hidden="true">
+            <BadgeCheck size={19} strokeWidth={1.8} />
+          </span>
           <div>
             <b>{t("Verified farms")}</b>
             <p>{t("Browse produce from farms reviewed by the marketplace.")}</p>
           </div>
         </article>
         <article>
-          <span aria-hidden="true">⌖</span>
+          <span className="landing-trust-icon" aria-hidden="true">
+            <MapPin size={19} strokeWidth={1.8} />
+          </span>
           <div>
             <b>{t("Know its origin")}</b>
             <p>{t("Explore farm and harvest details with product traceability.")}</p>
           </div>
         </article>
         <article>
-          <span aria-hidden="true">↔</span>
+          <span className="landing-trust-icon" aria-hidden="true">
+            <Handshake size={19} strokeWidth={1.8} />
+          </span>
           <div>
             <b>{t("Connect directly")}</b>
             <p>{t("Buyers and farmers can discuss orders and delivery.")}</p>
@@ -127,7 +147,9 @@ export default function Landing({
         </div>
         <div className="landing-feature-grid">
           <article className="landing-feature-card">
-            <span aria-hidden="true">🌾</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <Wheat size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("Reserve future harvests")}</h3>
               <p>
@@ -136,7 +158,9 @@ export default function Landing({
             </div>
           </article>
           <article className="landing-feature-card">
-            <span aria-hidden="true">🏷️</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <Tag size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("Save on bulk orders")}</h3>
               <p>
@@ -145,7 +169,9 @@ export default function Landing({
             </div>
           </article>
           <article className="landing-feature-card">
-            <span aria-hidden="true">▦</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <QrCode size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("Trace farm produce")}</h3>
               <p>
@@ -154,7 +180,9 @@ export default function Landing({
             </div>
           </article>
           <article className="landing-feature-card">
-            <span aria-hidden="true">💬</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <MessageCircle size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("Message farms")}</h3>
               <p>
@@ -163,7 +191,9 @@ export default function Landing({
             </div>
           </article>
           <article className="landing-feature-card">
-            <span aria-hidden="true">⭐</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <Star size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("Review completed orders")}</h3>
               <p>
@@ -172,7 +202,9 @@ export default function Landing({
             </div>
           </article>
           <article className="landing-feature-card">
-            <span aria-hidden="true">📦</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <PackageCheck size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("Manage farm orders")}</h3>
               <p>
@@ -196,21 +228,27 @@ export default function Landing({
         </div>
         <div className="landing-how-grid">
           <article className="landing-feature-card">
-            <span aria-hidden="true">🛒</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <ShoppingBasket size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("For buyers")}</h3>
               <p>{t("Create a buyer account, explore farm listings, choose produce, and track your orders from your dashboard.")}</p>
             </div>
           </article>
           <article className="landing-feature-card">
-            <span aria-hidden="true">🌱</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <Sprout size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("For farmers")}</h3>
               <p>{t("Create a farmer account, verify your phone, submit your farm details for review, then list produce and manage orders.")}</p>
             </div>
           </article>
           <article className="landing-feature-card">
-            <span aria-hidden="true">🛡️</span>
+            <span className="landing-feature-icon" aria-hidden="true">
+              <ShieldCheck size={21} strokeWidth={1.8} />
+            </span>
             <div>
               <h3>{t("A safer marketplace")}</h3>
               <p>{t("Farm listings are reviewed before they are fully verified. Buyers and farmers get separate dashboards for their work.")}</p>
@@ -225,7 +263,7 @@ export default function Landing({
             <span className="landing-eyebrow">{t("From farm to you")}</span>
             <h2>{t("Explore the marketplace")}</h2>
           </div>
-          <button className="btn" onClick={onBrowse}>
+          <button className="btn g" onClick={onBrowse}>
             {t("View all produce")}
           </button>
         </div>
@@ -269,10 +307,12 @@ export default function Landing({
           </div>
           <div className="landing-join-actions">
             <button className="btn g" onClick={() => onJoin("buyer")}>
-              🛒 {t("Join as a buyer")}
+              <ShoppingBasket className="landing-button-icon" size={17} aria-hidden="true" />
+              {t("Join as a buyer")}
             </button>
             <button className="btn" onClick={() => onJoin("farmer")}>
-              🌱 {t("Join as a farmer")}
+              <Sprout className="landing-button-icon" size={17} aria-hidden="true" />
+              {t("Join as a farmer")}
             </button>
           </div>
         </section>

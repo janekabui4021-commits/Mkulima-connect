@@ -3262,8 +3262,8 @@ def create_offtake_request(
                 WHERE farm.status = 'verified' AND farm.admin_suspended = FALSE
                   AND farmer.role = 'farmer' AND farmer.account_status = 'active'
                   AND (
-                    (:farm_id IS NOT NULL AND farm.id = :farm_id)
-                    OR (:farm_id IS NULL
+                    (CAST(:farm_id AS INTEGER) IS NOT NULL AND farm.id = :farm_id)
+                    OR (CAST(:farm_id AS INTEGER) IS NULL
                         AND lower(trim(farm.county)) = lower(trim(:county))
                         AND lower(trim(product.name)) = lower(trim(:crop_name))
                         AND (:variety = ''
@@ -6424,12 +6424,18 @@ async def stk_push(
     buyer: AuthenticatedUser = Depends(require_role("buyer")),
 ):
     order = rows(
-        "SELECT total_kes FROM orders WHERE id = :order_id AND buyer_id = :buyer_id",
+        "SELECT total_kes, status FROM orders "
+        "WHERE id = :order_id AND buyer_id = :buyer_id",
         order_id=request.order_id,
         buyer_id=buyer.id,
     )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found for this buyer")
+    if order[0]["status"] != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail="Only pending orders can be paid.",
+        )
     if not all(
         (
             settings.daraja_key,
@@ -6479,7 +6485,7 @@ async def stk_push(
     existing_payment = rows(
         """
         SELECT checkout_request_id FROM payments
-        WHERE order_id = :order_id AND status = 'initiated'
+        WHERE order_id = :order_id AND status IN ('initiated', 'success')
         ORDER BY id DESC LIMIT 1
         """,
         order_id=request.order_id,

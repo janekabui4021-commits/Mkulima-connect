@@ -21,7 +21,7 @@ export default function Cart({ cart, change, clear, close }: Props) {
     (sum, line) => sum + line.qty * discountedUnitPrice(line),
     0,
   );
-  const [phone, setPhone] = useState("254712345678");
+  const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);

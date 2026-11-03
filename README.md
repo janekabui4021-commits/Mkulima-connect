@@ -22,7 +22,7 @@ On Windows, double-click `Start Mkulima Connect.cmd` in the project folder to st
    uvicorn app.main:app --reload
    ```
 
-   The optional `backend/.env` can configure a local SQLite file. By default, the API stores its database at `backend/mkulima.db`, regardless of which directory you launch it from. It creates the database and loads sample farms and products on first start; later starts preserve saved data and only add missing sample rows. To use PostgreSQL instead, create the database, load `db/schema.sql` and `db/seed.sql` with `psql`, then set `DATABASE_URL` to its connection string.
+   The optional `backend/.env` can configure a local SQLite file. By default, the API stores its database at `backend/mkulima.db`, regardless of which directory you launch it from. It creates the database and loads sample farms and products on first start; later starts preserve saved data and only add missing sample rows.
 
 2. In a separate terminal, install and start the web app:
 
@@ -34,6 +34,38 @@ On Windows, double-click `Start Mkulima Connect.cmd` in the project folder to st
 
    Open the URL printed by Vite (usually `http://localhost:5173`).
    If the API uses a different port, set `VITE_API_PROXY_TARGET` to its URL before starting Vite.
+
+### Staged PostgreSQL migration
+
+Keep `DATABASE_URL` pointed at SQLite while preparing and testing PostgreSQL. Do not run these steps against a production or non-empty PostgreSQL database.
+
+1. Stop the API and make a fresh copy of `backend/mkulima.db`. Put the connection string for a **separate, empty staging database** in the ignored local `backend/.env` as `POSTGRES_MIGRATION_URL`. Do not commit or share the connection string.
+2. From the project root, initialize the empty PostgreSQL database:
+
+   ```powershell
+   .\backend\.venv\Scripts\python.exe .\db\initialize_postgres.py
+   ```
+
+   The initializer applies `db/schema.sql` and all migrations in order, in one transaction. It refuses to modify a database that already contains public tables.
+3. Copy the existing SQLite data and verify it:
+
+   ```powershell
+   .\backend\.venv\Scripts\python.exe .\db\copy_sqlite_to_postgres.py .\backend\mkulima.db
+   ```
+
+   The importer checks SQLite integrity, requires matching tables and columns, refuses a non-empty PostgreSQL target, copies transactionally, compares every table's row count, and resets serial ID sequences. For a fresh install without existing data, run `db/seed.sql` instead; do not seed before importing the SQLite database.
+4. Test the API against staging without changing the saved SQLite setting. In a separate PowerShell window:
+
+   ```powershell
+   cd backend
+   $setting = Get-Content .env | Where-Object { $_ -match '^POSTGRES_MIGRATION_URL=' } | Select-Object -First 1
+   if (-not $setting) { throw 'Set POSTGRES_MIGRATION_URL in backend/.env first.' }
+   $env:DATABASE_URL = $setting.Substring('POSTGRES_MIGRATION_URL='.Length).Trim().Trim('"').Trim("'")
+   .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8001
+   ```
+
+   Run the sign-up/sign-in, farmer verification, product create/edit, buyer search/compare, checkout, M-Pesa callback, buyer/farmer/admin dashboard, and date/price checks on the staging API. Use the Daraja sandbox or a mocked callback; do not trigger live payments during validation. Close that window to return to the saved SQLite configuration.
+5. Only after the staging checks pass, stop both APIs, set `DATABASE_URL` in `backend/.env` to the verified PostgreSQL URL, and restart the app. Keep the SQLite backup and the `main` branch until the new setup has been used successfully.
 
 To enable M-Pesa, create a Daraja app and put its credentials in `backend/.env`: set `DARAJA_ENVIRONMENT=sandbox`, `DARAJA_KEY`, `DARAJA_SECRET`, your sandbox `SHORTCODE` and `PASSKEY`, a long random `DARAJA_CALLBACK_SECRET`, and a publicly reachable HTTPS `CALLBACK_URL` ending in `/api/payments/mpesa/callback`. Generate the callback secret locally with `python -c "import secrets; print(secrets.token_urlsafe(32))"`; the backend adds it as a callback query token and never exposes it to the browser. The callback cannot use `localhost`; use an HTTPS tunnel for local testing and keep the API running while testing. Do not put credentials in the frontend or share them in chat. Start with Safaricom sandbox test numbers. For live payments, switch to `DARAJA_ENVIRONMENT=production` only after Safaricom has issued production credentials and enabled the shortcode/product. Checkout requests use the server-calculated order total, rounded to the nearest whole KES as required by STK Push. The app updates the order to paid only after a matching successful callback with the expected amount and receipt, and shows the payment status and receipt in checkout.
 

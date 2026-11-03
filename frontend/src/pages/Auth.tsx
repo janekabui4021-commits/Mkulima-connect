@@ -132,7 +132,7 @@ export default function Auth({
               type="button"
               onClick={onBack}
             >
-              ← {t("Back to home")}
+              {t("Back to home")}
             </button>
           )}
           <div className="auth-heading">

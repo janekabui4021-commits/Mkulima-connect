@@ -2,8 +2,15 @@
 INSERT INTO users (name, phone, password_hash, role)
 VALUES
     ('Demo Buyer', '254700000001', 'x', 'buyer'),
-    ('Demo Admin', '254700000002', 'x', 'admin')
+    ('Demo Admin', '0758563144', 'x', 'admin')
 ON CONFLICT (phone) DO NOTHING;
+
+INSERT INTO marketplace_settings (setting_key, setting_value) VALUES
+    ('categories', '["Vegetables","Fruits","Grains & Cereals","Legumes","Dairy","Other"]'),
+    ('counties', '["Kiambu","Nakuru","Meru","Kisii","Uasin Gishu","Nyandarua","Kirinyaga"]'),
+    ('marketplace_enabled', 'true'),
+    ('farm_applications_enabled', 'true')
+ON CONFLICT (setting_key) DO NOTHING;
 
 INSERT INTO farms
     (name, county, size_acres, rating, delivery_days, status, verified_at, latitude, longitude)
