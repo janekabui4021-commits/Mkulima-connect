@@ -1,33 +1,32 @@
 import { useEffect, useState } from "react";
+import { BadgeCheck, Leaf, Milk, Sprout, Star, Wheat } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { getFarms } from "../api";
 import type { Farm } from "../api";
 import { useTranslation } from "../i18n";
 
-const farmIcons: Record<string, string> = {
-  "eldoret maize growers": "🌽",
-  "green acres farm": "🥬",
-  "highland dairy": "🐄",
-  "kinoti farm": "🥑",
-  "kisii hills farm": "🍌",
-  "meru dairy co-op": "🥛",
-  "meru growers": "🫛",
-  "mwea rice growers": "🍚",
-  "ol kalou potato farm": "🥔",
+const farmIcons: Record<string, LucideIcon> = {
+  "eldoret maize growers": Wheat,
+  "green acres farm": Leaf,
+  "highland dairy": Milk,
+  "kinoti farm": Leaf,
+  "kisii hills farm": Leaf,
+  "meru dairy co-op": Milk,
+  "meru growers": Sprout,
+  "mwea rice growers": Wheat,
+  "ol kalou potato farm": Sprout,
 };
 
-function getFarmIcon(farm: Farm): string {
+function getFarmIcon(farm: Farm): LucideIcon {
   const knownFarmIcon = farmIcons[farm.name.trim().toLocaleLowerCase()];
   if (knownFarmIcon) return knownFarmIcon;
 
   const crops = farm.crops.toLocaleLowerCase();
-  if (/\b(dairy|milk|cream|yoghurt|yogurt|mala)\b/.test(crops)) return "🐄";
-  if (/\b(maize|corn)\b/.test(crops)) return "🌽";
-  if (/\brice\b/.test(crops)) return "🍚";
-  if (/\bpotatoes?\b/.test(crops)) return "🥔";
-  if (/\bavocados?\b/.test(crops)) return "🥑";
-  if (/\bbananas?\b/.test(crops)) return "🍌";
-  if (/\bbeans?\b/.test(crops)) return "🫘";
-  return "🌱";
+  if (/\b(dairy|milk|cream|yoghurt|yogurt|mala)\b/.test(crops)) return Milk;
+  if (/\b(maize|corn|rice|wheat)\b/.test(crops)) return Wheat;
+  if (/\bbeans?\b/.test(crops)) return Sprout;
+  if (crops) return Leaf;
+  return Sprout;
 }
 
 export default function Farms({
@@ -64,42 +63,55 @@ export default function Farms({
         ))}
       </select>
       <div className="grid">
-        {list.map((farm) => (
-          <article className="card" key={farm.id}>
-            <h3><span aria-hidden="true">{getFarmIcon(farm)}</span> {farm.name}</h3>
-            <p className="mut">
-              {farm.county} County · {farm.size_acres} acres
-            </p>
-            <p className="mut">
-              {farm.rating_count
-                ? `⭐ ${farm.rating} · ${farm.rating_count} buyer review${farm.rating_count === 1 ? "" : "s"}`
-                : "No buyer reviews yet"}
-            </p>
-            <p className="mut">Grows: {farm.crops}</p>
-            <p className="mut">
-              Farming methods:{" "}
-              {farm.farming_methods || "Not provided by the farm"}
-            </p>
-            <span className="badge">
-              ✔ {farm.verification_level === "provisional"
-                ? "Provisionally Verified"
-                : "Fully Verified"}{" "}
-              {farm.verified_at
-                ? new Date(farm.verified_at).toLocaleDateString()
-                : ""}
-            </span>
-            {canBrowseProduce && (
-              <p>
-                <button
-                  className="btn g"
-                  onClick={() => onSeeProduce(farm.county)}
-                >
-                  {t("See produce")}
-                </button>
+        {list.map((farm) => {
+          const FarmIcon = getFarmIcon(farm);
+          return (
+            <article className="card" key={farm.id}>
+              <h3>
+                <FarmIcon className="farm-card-icon" size={21} strokeWidth={1.8} aria-hidden="true" />
+                {farm.name}
+              </h3>
+              <p className="mut">
+                {farm.county} County · {farm.size_acres} acres
               </p>
-            )}
-          </article>
-        ))}
+              <p className="mut farm-card-rating">
+                {farm.rating_count ? (
+                  <>
+                    <Star size={15} strokeWidth={1.8} aria-hidden="true" />
+                    {farm.rating} · {farm.rating_count} buyer review
+                    {farm.rating_count === 1 ? "" : "s"}
+                  </>
+                ) : (
+                  "No buyer reviews yet"
+                )}
+              </p>
+              <p className="mut">Grows: {farm.crops}</p>
+              <p className="mut">
+                Farming methods:{" "}
+                {farm.farming_methods || "Not provided by the farm"}
+              </p>
+              <span className="badge farm-card-verification">
+                <BadgeCheck size={15} strokeWidth={1.8} aria-hidden="true" />
+                {farm.verification_level === "provisional"
+                  ? "Provisionally Verified"
+                  : "Fully Verified"}{" "}
+                {farm.verified_at
+                  ? new Date(farm.verified_at).toLocaleDateString()
+                  : ""}
+              </span>
+              {canBrowseProduce && (
+                <p>
+                  <button
+                    className="btn g"
+                    onClick={() => onSeeProduce(farm.county)}
+                  >
+                    {t("See produce")}
+                  </button>
+                </p>
+              )}
+            </article>
+          );
+        })}
       </div>
     </section>
   );

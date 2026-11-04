@@ -3,7 +3,6 @@ import type { FormEvent } from "react";
 import { ShieldCheck, ShoppingBasket, Sprout } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
-  bootstrapAdminAccount,
   confirmPasswordReset,
   loginAccount,
   registerAccount,
@@ -14,6 +13,7 @@ import { useTranslation } from "../i18n";
 
 type Mode = "login" | "register" | "reset";
 type LoginRole = AuthUser["role"];
+type SignupRole = "buyer" | "farmer";
 
 const loginRoles: {
   value: LoginRole;
@@ -41,13 +41,16 @@ const loginRoles: {
   },
 ];
 
-const signupRoles = loginRoles;
+const signupRoles = loginRoles.filter(
+  (option): option is (typeof loginRoles)[number] & { value: SignupRole } =>
+    option.value !== "admin",
+);
 
 interface Props {
   onAuthenticated: (user: AuthUser, token: string) => void;
   onBack?: () => void;
   initialMode?: Mode;
-  initialRole?: "buyer" | "farmer";
+  initialRole?: SignupRole;
 }
 
 export default function Auth({
@@ -62,13 +65,11 @@ export default function Auth({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [resetPhone, setResetPhone] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [resetRequested, setResetRequested] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [bootstrapToken, setBootstrapToken] = useState("");
-  const [role, setRole] = useState<LoginRole>(initialRole);
+  const [role, setRole] = useState<SignupRole>(initialRole);
   const [loginRole, setLoginRole] = useState<LoginRole>(initialRole);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -86,13 +87,12 @@ export default function Auth({
     setSuccess("");
     try {
       if (mode === "reset" && !resetRequested) {
-        const result = await requestPasswordReset(email, resetPhone);
+        const result = await requestPasswordReset(email);
         setSuccess(result.message);
         setResetRequested(true);
       } else if (mode === "reset") {
         const result = await confirmPasswordReset(
           email,
-          resetPhone,
           resetCode,
           newPassword,
         );
@@ -112,14 +112,7 @@ export default function Auth({
         finish(session);
       } else {
         const account = { name, email, phone, password };
-        finish(
-          role === "admin"
-            ? await bootstrapAdminAccount({
-                ...account,
-                bootstrap_token: bootstrapToken,
-              })
-            : await registerAccount({ ...account, role }),
-        );
+        finish(await registerAccount({ ...account, role }));
       }
     } catch (cause) {
       setError(
@@ -188,11 +181,9 @@ export default function Auth({
                 : mode === "reset"
                   ? t(
                       resetRequested
-                        ? "Enter the code sent to your registered phone and choose a new password."
-                        : "Enter your account email and registered phone number. We will text you a recovery code if they match.",
+                        ? "Enter the code sent to your email and choose a new password."
+                        : "Enter your account email. We will email you a recovery code if it matches.",
                     )
-                  : role === "admin"
-                  ? t("Create the first administrator account for this trial. You will need the bootstrap token configured by the backend.")
                   : role === "buyer"
                   ? t("Create a buyer account to discover produce, place orders, and connect with farms.")
                   : t("Create a farmer account, verify your phone, and submit GPS and video farm evidence to unlock provisional listings.")}
@@ -247,21 +238,6 @@ export default function Auth({
                 ))}
               </fieldset>
             )}
-            {mode === "register" && role === "admin" && (
-              <label className="form-field">
-                {t("Admin bootstrap token")}
-                <input
-                  required
-                  type="password"
-                  autoComplete="off"
-                  value={bootstrapToken}
-                  onChange={(event) => setBootstrapToken(event.target.value)}
-                />
-                <span className="mut">
-                  {t("Enter the ADMIN_BOOTSTRAP_TOKEN set in the backend environment.")}
-                </span>
-              </label>
-            )}
             {mode === "register" && (
               <>
                 <label className="form-field">
@@ -298,23 +274,10 @@ export default function Auth({
                 onChange={(event) => setEmail(event.target.value)}
               />
             </label>
-            {mode === "reset" && (
-              <label className="form-field">
-                {t("Phone number on your account")}
-                <input
-                  required
-                  type="tel"
-                  autoComplete="tel"
-                  value={resetPhone}
-                  onChange={(event) => setResetPhone(event.target.value)}
-                  placeholder="07XXXXXXXX or +2547XXXXXXXX"
-                />
-              </label>
-            )}
             {mode === "reset" && resetRequested && (
               <>
                 <label className="form-field">
-                  {t("SMS recovery code")}
+                  {t("Email recovery code")}
                   <input
                     required
                     inputMode="numeric"
@@ -387,8 +350,8 @@ export default function Auth({
               </button>
             </p>
           )}
-          <p className="auth-signup-prompt">
-            {mode !== "register" ? (
+          {mode !== "register" && (mode === "reset" || loginRole !== "admin") && (
+            <p className="auth-signup-prompt">
               <>
                 {mode === "login"
                   ? t("New to Mkulima Connect?")
@@ -401,7 +364,6 @@ export default function Auth({
                     if (mode === "reset") {
                       setMode("login");
                     } else {
-                      if (loginRole === "admin") setRole("admin");
                       setMode("register");
                     }
                   }}
@@ -409,21 +371,22 @@ export default function Auth({
                   {t(mode === "login" ? "Create an account" : "Sign in")}
                 </button>
               </>
-            ) : (
-              <>
-                {t("Already have an account?")}{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError("");
-                    setMode("login");
-                  }}
-                >
-                  {t("Sign in")}
-                </button>
-              </>
-            )}
-          </p>
+            </p>
+          )}
+          {mode === "register" && (
+            <p className="auth-signup-prompt">
+              {t("Already have an account?")}{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setMode("login");
+                }}
+              >
+                {t("Sign in")}
+              </button>
+            </p>
+          )}
           <p className="auth-signup-prompt auth-admin-prompt">
             {t("Want to try the admin dashboard?")}{" "}
             <button

@@ -395,7 +395,9 @@ export default function App() {
             }
             setPendingCartProduct(null);
             setTab(
-              pendingCartProduct
+              authenticated.role === "admin"
+                ? "admin"
+                : pendingCartProduct
                 ? authenticated.role === "buyer" ? "market" : "home"
                 : authenticated.role === "buyer" && messageProductId
                   ? "messages"

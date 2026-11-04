@@ -925,6 +925,28 @@ main {
   margin: 0;
 }
 
+.farm-card-icon {
+  flex: 0 0 auto;
+  color: var(--g);
+  vertical-align: middle;
+}
+
+.farm-card-rating {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.farm-card-rating svg {
+  color: #b7791f;
+}
+
+.farm-card-verification {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .admin-page {
   display: grid;
   gap: 16px;

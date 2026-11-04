@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       proxy: {
-        "/api": VITE_API_PROXY_TARGET || "http://127.0.0.1:8003",
+        "/api": VITE_API_PROXY_TARGET || "http://127.0.0.1:8004",
       },
     },
   };

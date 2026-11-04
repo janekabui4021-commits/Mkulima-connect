@@ -614,20 +614,19 @@ export const bootstrapAdminAccount = (account: {
 }) => requestJson<AuthSession>("/auth/bootstrap-admin", post(account));
 export const loginAccount = (email: string, password: string) =>
   requestJson<AuthSession>("/auth/login", post({ email, password }));
-export const requestPasswordReset = (email: string, phone: string) =>
+export const requestPasswordReset = (email: string) =>
   requestJson<{ ok: boolean; message: string }>(
     "/auth/password-reset/request",
-    post({ email, phone }),
+    post({ email }),
   );
 export const confirmPasswordReset = (
   email: string,
-  phone: string,
   code: string,
   new_password: string,
 ) =>
   requestJson<{ ok: boolean; message: string }>(
     "/auth/password-reset/confirm",
-    post({ email, phone, code, new_password }),
+    post({ email, code, new_password }),
   );
 export const getCurrentUser = () => requestJson<AuthUser>("/auth/me");
 export const getAccountProfile = () =>

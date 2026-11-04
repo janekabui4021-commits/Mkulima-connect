@@ -8,9 +8,12 @@ import os
 import re
 import secrets
 import sqlite3
+import smtplib
+import ssl
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -86,10 +89,20 @@ class Settings(BaseSettings):
     callback_url: str = "https://example.com/api/payments/mpesa/callback"
     auth_secret: str = ""
     admin_bootstrap_token: str = ""
+    admin_bootstrap_name: str = ""
+    admin_bootstrap_email: str = ""
+    admin_bootstrap_phone: str = ""
     africastalking_username: str = ""
     africastalking_api_key: str = ""
     africastalking_sender_id: str = ""
     africastalking_environment: Literal["sandbox", "production"] = "sandbox"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
 
 
 settings = Settings()
@@ -277,6 +290,9 @@ def initialize_sqlite_database() -> None:
             },
             "conversation_messages": {
                 "provider_message_id": "TEXT",
+            },
+            "password_reset_otps": {
+                "email": "TEXT",
             },
         }
         for table, columns in migrations.items():
@@ -740,15 +756,63 @@ def _send_farmer_otp(phone: str, code: str) -> None:
     )
 
 
-def _send_password_reset_otp(phone: str, code: str) -> None:
-    _send_otp_sms(
-        phone,
-        (
-            f"Your Mkulima Connect password reset code is {code}. "
-            "It expires in 10 minutes. If you did not request this, ignore this message."
-        ),
-        "password reset",
+def _validate_smtp_configuration() -> None:
+    if not settings.smtp_host or not settings.smtp_from_email:
+        raise HTTPException(
+            status_code=503,
+            detail="Email password recovery is unavailable until SMTP is configured.",
+        )
+    if bool(settings.smtp_username) != bool(settings.smtp_password):
+        raise HTTPException(
+            status_code=503,
+            detail="Email password recovery SMTP credentials are incomplete.",
+        )
+    if settings.smtp_use_ssl and settings.smtp_use_tls:
+        raise HTTPException(
+            status_code=503,
+            detail="Configure SMTP to use either implicit SSL or STARTTLS, not both.",
+        )
+
+
+def _send_password_reset_email(recipient: str, code: str) -> None:
+    _validate_smtp_configuration()
+    message = EmailMessage()
+    message["Subject"] = "Mkulima Connect password reset code"
+    message["From"] = settings.smtp_from_email
+    message["To"] = recipient
+    message.set_content(
+        f"Your Mkulima Connect password reset code is {code}.\n\n"
+        "It expires in 10 minutes. If you did not request this, ignore this email."
     )
+
+    try:
+        if settings.smtp_use_ssl:
+            with smtplib.SMTP_SSL(
+                settings.smtp_host,
+                settings.smtp_port,
+                timeout=10,
+                context=ssl.create_default_context(),
+            ) as server:
+                if settings.smtp_username:
+                    server.login(settings.smtp_username, settings.smtp_password)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(
+                settings.smtp_host,
+                settings.smtp_port,
+                timeout=10,
+            ) as server:
+                if settings.smtp_use_tls:
+                    server.starttls(context=ssl.create_default_context())
+                if settings.smtp_username:
+                    server.login(settings.smtp_username, settings.smtp_password)
+                server.send_message(message)
+    except (OSError, smtplib.SMTPException) as error:
+        logger.exception("Could not deliver a password reset email")
+        raise HTTPException(
+            status_code=502,
+            detail="Could not deliver the recovery email. Please try again.",
+        ) from error
 
 
 def _send_farmer_message_sms(phone: str, message: str) -> str:
@@ -894,7 +958,6 @@ def login(request: LoginRequest):
 
 class PasswordResetRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254)
-    phone: str = Field(min_length=7, max_length=30)
 
     @field_validator("email")
     @classmethod
@@ -903,14 +966,6 @@ class PasswordResetRequest(BaseModel):
         if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
             raise ValueError("Enter a valid email address")
         return normalized
-
-    @field_validator("phone")
-    @classmethod
-    def normalize_phone(cls, value: str) -> str:
-        try:
-            return _normalize_phone(value)
-        except HTTPException as error:
-            raise ValueError(error.detail) from error
 
 
 class PasswordResetConfirm(PasswordResetRequest):
@@ -933,63 +988,56 @@ def _as_utc_datetime(value: datetime | str) -> datetime:
 
 @app.post("/api/auth/password-reset/request")
 def request_password_reset(request: PasswordResetRequest):
-    if not settings.africastalking_username or not settings.africastalking_api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="SMS password recovery is unavailable until Africa's Talking is configured.",
-        )
-
+    _validate_smtp_configuration()
     user = rows(
         """
-        SELECT id, phone FROM users
+        SELECT id, phone, email FROM users
         WHERE lower(email) = :email AND email IS NOT NULL
           AND password_hash LIKE 'scrypt$%'
         """,
         email=request.email,
     )
     if user:
-        try:
-            phone = _normalize_phone(str(user[0]["phone"]))
-        except HTTPException:
-            phone = ""
-        if phone and secrets.compare_digest(phone, request.phone):
-            user_id = int(user[0]["id"])
-            previous = rows(
-                "SELECT last_sent_at FROM password_reset_otps WHERE user_id = :user_id",
-                user_id=user_id,
-            )
-            now = datetime.now(timezone.utc)
-            if not previous or now - _as_utc_datetime(previous[0]["last_sent_at"]) >= timedelta(seconds=60):
-                code = f"{secrets.randbelow(1_000_000):06d}"
-                _send_password_reset_otp(phone, code)
-                with engine.begin() as connection:
-                    connection.execute(
-                        text(
-                            """
-                            INSERT INTO password_reset_otps
-                                (user_id, phone, code_hash, expires_at, attempts, last_sent_at)
-                            VALUES
-                                (:user_id, :phone, :code_hash, :expires_at, 0, :last_sent_at)
-                            ON CONFLICT (user_id) DO UPDATE SET
-                                phone = excluded.phone,
-                                code_hash = excluded.code_hash,
-                                expires_at = excluded.expires_at,
-                                attempts = 0,
-                                last_sent_at = excluded.last_sent_at
-                            """
-                        ),
-                        {
-                            "user_id": user_id,
-                            "phone": phone,
-                            "code_hash": _password_reset_otp_hash(user_id, code),
-                            "expires_at": (now + timedelta(minutes=10)).isoformat(),
-                            "last_sent_at": now.isoformat(),
-                        },
-                    )
+        user_id = int(user[0]["id"])
+        email = str(user[0]["email"]).strip().lower()
+        previous = rows(
+            "SELECT last_sent_at FROM password_reset_otps WHERE user_id = :user_id",
+            user_id=user_id,
+        )
+        now = datetime.now(timezone.utc)
+        if not previous or now - _as_utc_datetime(previous[0]["last_sent_at"]) >= timedelta(seconds=60):
+            code = f"{secrets.randbelow(1_000_000):06d}"
+            _send_password_reset_email(email, code)
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO password_reset_otps
+                            (user_id, phone, email, code_hash, expires_at, attempts, last_sent_at)
+                        VALUES
+                            (:user_id, :phone, :email, :code_hash, :expires_at, 0, :last_sent_at)
+                        ON CONFLICT (user_id) DO UPDATE SET
+                            phone = excluded.phone,
+                            email = excluded.email,
+                            code_hash = excluded.code_hash,
+                            expires_at = excluded.expires_at,
+                            attempts = 0,
+                            last_sent_at = excluded.last_sent_at
+                        """
+                    ),
+                    {
+                        "user_id": user_id,
+                        "phone": str(user[0]["phone"]),
+                        "email": email,
+                        "code_hash": _password_reset_otp_hash(user_id, code),
+                        "expires_at": (now + timedelta(minutes=10)).isoformat(),
+                        "last_sent_at": now.isoformat(),
+                    },
+                )
 
     return {
         "ok": True,
-        "message": "If the details match an account, a code has been sent to its registered phone.",
+        "message": "If the email matches an account, check its inbox. You can request another code after 60 seconds.",
     }
 
 
@@ -1001,27 +1049,19 @@ def confirm_password_reset(request: PasswordResetConfirm):
         user = connection.execute(
             text(
                 """
-                SELECT id, phone FROM users
+                SELECT id, email FROM users
                 WHERE lower(email) = :email
                   AND email IS NOT NULL AND password_hash LIKE 'scrypt$%'
                 """
             ),
             {"email": request.email},
         ).first()
-        stored_phone = ""
-        if user is not None:
-            try:
-                stored_phone = _normalize_phone(str(user.phone))
-            except HTTPException:
-                pass
-        if user is None or not stored_phone or not secrets.compare_digest(stored_phone, request.phone):
-            user = None
         otp = None
         if user is not None:
             otp = connection.execute(
                 text(
                     """
-                    SELECT phone, code_hash, expires_at, attempts
+                    SELECT email, code_hash, expires_at, attempts
                     FROM password_reset_otps WHERE user_id = :user_id
                     """
                 ),
@@ -1035,7 +1075,10 @@ def confirm_password_reset(request: PasswordResetConfirm):
                 text("DELETE FROM password_reset_otps WHERE user_id = :user_id"),
                 {"user_id": user.id},
             )
-        elif otp is not None and not secrets.compare_digest(str(otp.phone), request.phone):
+        elif otp is not None and not secrets.compare_digest(
+            str(otp.email or "").strip().lower(),
+            request.email,
+        ):
             otp = None
         elif otp is not None and not secrets.compare_digest(
             _password_reset_otp_hash(int(user.id), request.code),
@@ -1160,12 +1203,43 @@ def bootstrap_admin(request: BootstrapAdminRequest):
         request.bootstrap_token, settings.admin_bootstrap_token
     ):
         raise HTTPException(status_code=403, detail="Admin bootstrap is not configured or token is invalid")
-    with engine.connect() as connection:
-        admin_exists = connection.execute(
-            text("SELECT id FROM users WHERE role = 'admin' AND password_hash LIKE 'scrypt$%' LIMIT 1")
-        ).first()
-    if admin_exists:
-        raise HTTPException(status_code=409, detail="An administrator account already exists")
+
+    configured_identity = (
+        settings.admin_bootstrap_name.strip(),
+        settings.admin_bootstrap_email.strip().lower(),
+        settings.admin_bootstrap_phone.strip(),
+    )
+    if any(configured_identity):
+        if not all(configured_identity):
+            raise HTTPException(
+                status_code=503,
+                detail="The configured admin identity is incomplete.",
+            )
+        try:
+            configured_phone = _normalize_phone(configured_identity[2])
+            request_phone = _normalize_phone(request.phone)
+        except HTTPException as error:
+            raise HTTPException(
+                status_code=503,
+                detail="The configured admin identity has an invalid phone number.",
+            ) from error
+        if not (
+            secrets.compare_digest(request.name.strip().casefold(), configured_identity[0].casefold())
+            and secrets.compare_digest(request.email, configured_identity[1])
+            and secrets.compare_digest(request_phone, configured_phone)
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Account details do not match the configured admin identity.",
+            )
+    else:
+        with engine.connect() as connection:
+            admin_exists = connection.execute(
+                text("SELECT id FROM users WHERE role = 'admin' AND password_hash LIKE 'scrypt$%' LIMIT 1")
+            ).first()
+        if admin_exists:
+            raise HTTPException(status_code=409, detail="An administrator account already exists")
+
     return _create_account(
         request.name, request.email, request.phone, request.password, "admin"
     )
