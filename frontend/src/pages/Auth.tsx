@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { ShieldCheck, ShoppingBasket, Sprout } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   bootstrapAdminAccount,
   confirmPasswordReset,
@@ -8,7 +10,6 @@ import {
   requestPasswordReset,
 } from "../api";
 import type { AuthSession, AuthUser } from "../api";
-import ProductImage from "../ProductImage";
 import { useTranslation } from "../i18n";
 
 type Mode = "login" | "register" | "reset";
@@ -16,25 +17,25 @@ type LoginRole = AuthUser["role"];
 
 const loginRoles: {
   value: LoginRole;
-  icon: string;
+  icon: LucideIcon;
   label: string;
   description: string;
 }[] = [
   {
     value: "buyer",
-    icon: "🛒",
+    icon: ShoppingBasket,
     label: "Buyer",
     description: "Shop fresh produce",
   },
   {
     value: "farmer",
-    icon: "🌾",
+    icon: Sprout,
     label: "Farmer",
     description: "Manage your farm",
   },
   {
     value: "admin",
-    icon: "🛡️",
+    icon: ShieldCheck,
     label: "Admin",
     description: "Oversee the platform",
   },
@@ -153,12 +154,6 @@ export default function Auth({
               {t("Meet the farmers behind your food, discover fresh local produce, and grow your business with a community that connects.")}
             </p>
           </div>
-          <div className="auth-produce" aria-hidden="true">
-            <ProductImage name="avocados" compact />
-            <ProductImage name="tomatoes" compact />
-            <ProductImage name="maize" compact />
-            <ProductImage name="sukuma wiki" compact />
-          </div>
           <p className="auth-showcase-foot">{t("A better connection from farm to table.")}</p>
         </aside>
 
@@ -220,7 +215,9 @@ export default function Auth({
                       setError("");
                     }}
                   >
-                    <span className="auth-role-icon" aria-hidden="true">{option.icon}</span>
+                    <span className="auth-role-icon" aria-hidden="true">
+                      <option.icon size={22} strokeWidth={1.8} />
+                    </span>
                     <span className="auth-role-label">{t(option.label)}</span>
                     <span className="auth-role-description">{t(option.description)}</span>
                   </button>
@@ -241,7 +238,9 @@ export default function Auth({
                       setError("");
                     }}
                   >
-                    <span className="auth-role-icon" aria-hidden="true">{option.icon}</span>
+                    <span className="auth-role-icon" aria-hidden="true">
+                      <option.icon size={22} strokeWidth={1.8} />
+                    </span>
                     <span className="auth-role-label">{t(option.label)}</span>
                     <span className="auth-role-description">{t(option.description)}</span>
                   </button>

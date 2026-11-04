@@ -1847,8 +1847,8 @@ textarea {
 }
 
 .auth-role-icon {
-  font-size: 21px;
-  line-height: 1.2;
+  display: inline-flex;
+  color: var(--g);
 }
 
 .auth-role-label {
