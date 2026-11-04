@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     account_status TEXT NOT NULL DEFAULT 'active' CHECK (
         account_status IN ('active', 'suspended', 'pending', 'disabled')
     ),
+    token_version INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -44,6 +45,15 @@ CREATE TABLE IF NOT EXISTS farms (
 );
 
 CREATE TABLE IF NOT EXISTS farmer_phone_otps (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    phone TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_sent_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_otps (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     phone TEXT NOT NULL,
     code_hash TEXT NOT NULL,

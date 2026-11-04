@@ -21,6 +21,7 @@ REQUIRED_TABLES = {
     "marketplace_settings",
     "offtake_quotes",
     "orders",
+    "password_reset_otps",
     "products",
     "users",
 }

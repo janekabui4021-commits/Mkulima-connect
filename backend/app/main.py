@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     africastalking_username: str = ""
     africastalking_api_key: str = ""
     africastalking_sender_id: str = ""
+    africastalking_environment: Literal["sandbox", "production"] = "sandbox"
 
 
 settings = Settings()
@@ -154,6 +155,15 @@ def initialize_sqlite_database() -> None:
             connection.execute(
                 "ALTER TABLE users ADD COLUMN account_status TEXT NOT NULL DEFAULT 'active'"
             )
+        for column, declaration in (
+            ("phone_verified", "INTEGER NOT NULL DEFAULT 0"),
+            ("token_version", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in legacy_user_columns:
+                connection.execute(
+                    f"ALTER TABLE users ADD COLUMN {column} {declaration}"
+                )
+                legacy_user_columns.add(column)
         users_schema = connection.execute(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'"
         ).fetchone()
@@ -182,8 +192,10 @@ def initialize_sqlite_database() -> None:
                     email TEXT UNIQUE,
                     password_hash TEXT NOT NULL,
                     role TEXT NOT NULL CHECK (role IN ('farmer', 'buyer', 'admin')),
+                    phone_verified INTEGER NOT NULL DEFAULT 0,
                     account_status TEXT NOT NULL DEFAULT 'active'
                         CHECK (account_status IN ('active', 'suspended', 'pending', 'disabled')),
+                    token_version INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -191,8 +203,10 @@ def initialize_sqlite_database() -> None:
             connection.execute(
                 """
                 INSERT INTO users_new
-                    (id, name, phone, email, password_hash, role, account_status, created_at)
-                SELECT id, name, phone, email, password_hash, role, account_status, created_at
+                    (id, name, phone, email, password_hash, role, phone_verified,
+                     account_status, token_version, created_at)
+                SELECT id, name, phone, email, password_hash, role, phone_verified,
+                       account_status, token_version, created_at
                 FROM users
                 """
             )
@@ -209,6 +223,7 @@ def initialize_sqlite_database() -> None:
             "users": {
                 "account_status": "TEXT NOT NULL DEFAULT 'active'",
                 "phone_verified": "INTEGER NOT NULL DEFAULT 0",
+                "token_version": "INTEGER NOT NULL DEFAULT 0",
             },
             "farms": {
                 "latitude": "NUMERIC",
@@ -542,7 +557,7 @@ def _password_matches(password: str, stored_hash: str) -> bool:
         return False
 
 
-def _issue_token(user: AuthenticatedUser) -> str:
+def _issue_token(user: AuthenticatedUser, token_version: int = 0) -> str:
     now = int(datetime.now().timestamp())
     header = _b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
     payload = _b64encode(
@@ -550,6 +565,7 @@ def _issue_token(user: AuthenticatedUser) -> str:
             {
                 "sub": user.id,
                 "role": user.role,
+                "ver": token_version,
                 "iat": now,
                 "exp": now + 60 * 60 * 12,
             }
@@ -579,19 +595,22 @@ def get_current_user(
         if int(claims["exp"]) <= int(datetime.now().timestamp()):
             raise ValueError("Expired token")
         user_id = int(claims["sub"])
+        token_version = int(claims.get("ver", 0))
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     user = rows(
         """
-        SELECT id, name, email, role, account_status FROM users
+        SELECT id, name, email, role, account_status, token_version FROM users
         WHERE id = :user_id AND email IS NOT NULL AND password_hash LIKE 'scrypt$%'
         """,
         user_id=user_id,
     )
     if not user:
         raise HTTPException(status_code=401, detail="Account is unavailable")
+    if token_version != int(user[0]["token_version"]):
+        raise HTTPException(status_code=401, detail="Session has expired; sign in again")
     _require_active_account(str(user[0]["account_status"]))
-    return AuthenticatedUser(**user[0])
+    return AuthenticatedUser(**{key: user[0][key] for key in ("id", "name", "email", "role")})
 
 
 def require_role(*roles: str):
@@ -664,16 +683,12 @@ def _otp_hash(user_id: int, code: str) -> str:
     ).hexdigest()
 
 
-def _send_farmer_otp(phone: str, code: str) -> None:
-    message = (
-        f"Your Mkulima Connect verification code is {code}. "
-        "It expires in 10 minutes."
-    )
+def _send_otp_sms(phone: str, message: str, purpose: str) -> None:
     if not settings.africastalking_username or not settings.africastalking_api_key:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Phone verification is unavailable until Africa's Talking credentials "
+                "SMS delivery is unavailable until Africa's Talking credentials "
                 "are configured"
             ),
         )
@@ -684,9 +699,14 @@ def _send_farmer_otp(phone: str, code: str) -> None:
     }
     if settings.africastalking_sender_id:
         form_data["from"] = settings.africastalking_sender_id
+    api_host = (
+        "https://api.africastalking.com"
+        if settings.africastalking_environment == "production"
+        else "https://api.sandbox.africastalking.com"
+    )
     try:
         response = httpx.post(
-            "https://api.sandbox.africastalking.com/version1/messaging",
+            f"{api_host}/version1/messaging",
             data=form_data,
             headers={"apiKey": settings.africastalking_api_key, "Accept": "application/json"},
             timeout=10,
@@ -705,11 +725,30 @@ def _send_farmer_otp(phone: str, code: str) -> None:
         ):
             raise ValueError("The SMS provider did not confirm delivery")
     except (httpx.HTTPError, ValueError, KeyError) as error:
-        logger.warning("Africa's Talking could not deliver a farmer verification code: %s", error)
+        logger.warning("Africa's Talking could not deliver %s SMS: %s", purpose, error)
         raise HTTPException(
             status_code=502,
-            detail="Could not deliver the verification code. Please try again.",
+            detail="Could not deliver the code. Please try again.",
         ) from error
+
+
+def _send_farmer_otp(phone: str, code: str) -> None:
+    _send_otp_sms(
+        phone,
+        f"Your Mkulima Connect verification code is {code}. It expires in 10 minutes.",
+        "farmer verification",
+    )
+
+
+def _send_password_reset_otp(phone: str, code: str) -> None:
+    _send_otp_sms(
+        phone,
+        (
+            f"Your Mkulima Connect password reset code is {code}. "
+            "It expires in 10 minutes. If you did not request this, ignore this message."
+        ),
+        "password reset",
+    )
 
 
 def _send_farmer_message_sms(phone: str, message: str) -> str:
@@ -725,9 +764,14 @@ def _send_farmer_message_sms(phone: str, message: str) -> str:
     }
     if settings.africastalking_sender_id:
         form_data["from"] = settings.africastalking_sender_id
+    api_host = (
+        "https://api.africastalking.com"
+        if settings.africastalking_environment == "production"
+        else "https://api.sandbox.africastalking.com"
+    )
     try:
         response = httpx.post(
-            "https://api.sandbox.africastalking.com/version1/messaging",
+            f"{api_host}/version1/messaging",
             data=form_data,
             headers={
                 "apiKey": settings.africastalking_api_key,
@@ -829,7 +873,7 @@ class LoginRequest(BaseModel):
 def login(request: LoginRequest):
     user = rows(
         """
-        SELECT id, name, email, role, password_hash, account_status
+        SELECT id, name, email, role, password_hash, account_status, token_version
         FROM users WHERE lower(email) = :email
         """,
         email=request.email.strip().lower(),
@@ -842,10 +886,186 @@ def login(request: LoginRequest):
     _require_active_account(str(user[0]["account_status"]))
     authenticated = AuthenticatedUser(**{key: user[0][key] for key in ("id", "name", "email", "role")})
     return {
-        "access_token": _issue_token(authenticated),
+        "access_token": _issue_token(authenticated, int(user[0]["token_version"])),
         "token_type": "bearer",
         "user": authenticated,
     }
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+    phone: str = Field(min_length=7, max_length=30)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+            raise ValueError("Enter a valid email address")
+        return normalized
+
+    @field_validator("phone")
+    @classmethod
+    def normalize_phone(cls, value: str) -> str:
+        try:
+            return _normalize_phone(value)
+        except HTTPException as error:
+            raise ValueError(error.detail) from error
+
+
+class PasswordResetConfirm(PasswordResetRequest):
+    code: str = Field(pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+def _password_reset_otp_hash(user_id: int, code: str) -> str:
+    return hmac.new(
+        settings.auth_secret.encode(),
+        f"password-reset-otp:{user_id}:{code}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _as_utc_datetime(value: datetime | str) -> datetime:
+    parsed = datetime.fromisoformat(value) if isinstance(value, str) else value
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
+@app.post("/api/auth/password-reset/request")
+def request_password_reset(request: PasswordResetRequest):
+    if not settings.africastalking_username or not settings.africastalking_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="SMS password recovery is unavailable until Africa's Talking is configured.",
+        )
+
+    user = rows(
+        """
+        SELECT id, phone FROM users
+        WHERE lower(email) = :email AND email IS NOT NULL
+          AND password_hash LIKE 'scrypt$%'
+        """,
+        email=request.email,
+    )
+    if user:
+        try:
+            phone = _normalize_phone(str(user[0]["phone"]))
+        except HTTPException:
+            phone = ""
+        if phone and secrets.compare_digest(phone, request.phone):
+            user_id = int(user[0]["id"])
+            previous = rows(
+                "SELECT last_sent_at FROM password_reset_otps WHERE user_id = :user_id",
+                user_id=user_id,
+            )
+            now = datetime.now(timezone.utc)
+            if not previous or now - _as_utc_datetime(previous[0]["last_sent_at"]) >= timedelta(seconds=60):
+                code = f"{secrets.randbelow(1_000_000):06d}"
+                _send_password_reset_otp(phone, code)
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            """
+                            INSERT INTO password_reset_otps
+                                (user_id, phone, code_hash, expires_at, attempts, last_sent_at)
+                            VALUES
+                                (:user_id, :phone, :code_hash, :expires_at, 0, :last_sent_at)
+                            ON CONFLICT (user_id) DO UPDATE SET
+                                phone = excluded.phone,
+                                code_hash = excluded.code_hash,
+                                expires_at = excluded.expires_at,
+                                attempts = 0,
+                                last_sent_at = excluded.last_sent_at
+                            """
+                        ),
+                        {
+                            "user_id": user_id,
+                            "phone": phone,
+                            "code_hash": _password_reset_otp_hash(user_id, code),
+                            "expires_at": (now + timedelta(minutes=10)).isoformat(),
+                            "last_sent_at": now.isoformat(),
+                        },
+                    )
+
+    return {
+        "ok": True,
+        "message": "If the details match an account, a code has been sent to its registered phone.",
+    }
+
+
+@app.post("/api/auth/password-reset/confirm")
+def confirm_password_reset(request: PasswordResetConfirm):
+    failure_status = 400
+    failure_detail = "The code or account details are invalid or expired."
+    with engine.begin() as connection:
+        user = connection.execute(
+            text(
+                """
+                SELECT id, phone FROM users
+                WHERE lower(email) = :email
+                  AND email IS NOT NULL AND password_hash LIKE 'scrypt$%'
+                """
+            ),
+            {"email": request.email},
+        ).first()
+        stored_phone = ""
+        if user is not None:
+            try:
+                stored_phone = _normalize_phone(str(user.phone))
+            except HTTPException:
+                pass
+        if user is None or not stored_phone or not secrets.compare_digest(stored_phone, request.phone):
+            user = None
+        otp = None
+        if user is not None:
+            otp = connection.execute(
+                text(
+                    """
+                    SELECT phone, code_hash, expires_at, attempts
+                    FROM password_reset_otps WHERE user_id = :user_id
+                    """
+                ),
+                {"user_id": user.id},
+            ).first()
+        if otp is not None and int(otp.attempts) >= 5:
+            failure_status = 429
+            failure_detail = "Too many incorrect codes. Request a new code."
+        elif otp is not None and datetime.now(timezone.utc) >= _as_utc_datetime(otp.expires_at):
+            connection.execute(
+                text("DELETE FROM password_reset_otps WHERE user_id = :user_id"),
+                {"user_id": user.id},
+            )
+        elif otp is not None and not secrets.compare_digest(str(otp.phone), request.phone):
+            otp = None
+        elif otp is not None and not secrets.compare_digest(
+            _password_reset_otp_hash(int(user.id), request.code),
+            str(otp.code_hash),
+        ):
+            connection.execute(
+                text(
+                    "UPDATE password_reset_otps SET attempts = attempts + 1 "
+                    "WHERE user_id = :user_id"
+                ),
+                {"user_id": user.id},
+            )
+        elif otp is not None:
+            connection.execute(
+                text(
+                    "UPDATE users SET password_hash = :password_hash, "
+                    "token_version = token_version + 1 WHERE id = :user_id"
+                ),
+                {
+                    "password_hash": _password_hash(request.new_password),
+                    "user_id": user.id,
+                },
+            )
+            connection.execute(
+                text("DELETE FROM password_reset_otps WHERE user_id = :user_id"),
+                {"user_id": user.id},
+            )
+            return {"ok": True, "message": "Password reset. Sign in with your new password."}
+
+    raise HTTPException(status_code=failure_status, detail=failure_detail)
 
 
 @app.get("/api/auth/me")

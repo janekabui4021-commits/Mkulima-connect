@@ -59,7 +59,7 @@ const productSearch: Record<string, { terms: string; names: string[] }> = {
 };
 
 const unsuitableImage =
-  /\b(cook(?:ed|ing)?|recipe|meal|dish|cuisine|soup|stew|curry|sauce|salad|roast(?:ed)?|fried|baked|boiled|grilled|plant|seedling|sprout|field|farm|cultivat(?:e|ed|ion)|growing|flower|blossom|tree|bush|garden|potted|ornamental|rotten|logo|website|movie|film|comic|expo|panel|screenshot|advert(?:isement)?|cartoon|illustration|drawing|painting|sculpture|mascot|powder(?:ed)?|condensed|evaporated|udder|livestock)\b/i;
+  /\b(cook(?:ed|ing)?|recipe|meal|dish|cuisine|soup|stew|curry|sauce|salad|roast(?:ed)?|fried|baked|boiled|grilled|plant|seedling|sprout|field|farm|cultivat(?:e|ed|ion)|growing|flower|blossom|tree|bush|garden|potted|ornamental|rotten|disease|diseased|infection|infected|fungus|fungal|mould|mold|pest|damaged|decay|blight|rot|logo|website|movie|film|comic|expo|panel|screenshot|advert(?:isement)?|cartoon|illustration|drawing|painting|sculpture|mascot|powder(?:ed)?|condensed|evaporated|udder|livestock)\b/i;
 const imageRequests = new Map<string, Promise<ProductPhoto | null>>();
 const curatedProductPhotos: Record<string, ProductPhoto> = {
   "avocados:meru growers": {
@@ -79,6 +79,12 @@ const curatedProductPhotos: Record<string, ProductPhoto> = {
     sourceUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQYFec-JqV2t-QVFDdptChFZnKQi5cdexXUNXNDoJ-qvw&s=10",
     artist: "User-provided image",
     license: "Used with permission",
+  },
+  cabbage: {
+    url: "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b2/Fresh_cabbage.jpg/960px-Fresh_cabbage.jpg",
+    sourceUrl: "https://commons.wikimedia.org/wiki/File:Fresh_cabbage.jpg",
+    artist: "Hajia Hijjah",
+    license: "CC BY-SA 4.0",
   },
   "sukuma wiki": {
     url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTSy1A2readA_0gBoYa16qjRynwEm-EI3nMgSPuO5YDr4NZkUK3awxYxro&s=10",

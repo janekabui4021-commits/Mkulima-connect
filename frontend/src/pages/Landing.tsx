@@ -38,7 +38,16 @@ export default function Landing({
 
   useEffect(() => {
     getProducts()
-      .then((products) => setFeatured(products.slice(0, 3)))
+      .then((products) => {
+        const seenProducts = new Set<string>();
+        const featuredProducts = products.filter((product) => {
+          const name = product.name.trim().toLocaleLowerCase();
+          if (seenProducts.has(name)) return false;
+          seenProducts.add(name);
+          return true;
+        });
+        setFeatured(featuredProducts.slice(0, 4));
+      })
       .catch((cause: unknown) => {
         setCatalogError(
           "Current listings could not be loaded. You can still browse the marketplace or create an account.",
