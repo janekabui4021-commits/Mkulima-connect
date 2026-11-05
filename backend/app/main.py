@@ -510,6 +510,33 @@ def initialize_postgresql_offtake_schema() -> None:
 
 
 initialize_postgresql_offtake_schema()
+
+
+def initialize_postgresql_marketplace_settings() -> None:
+    if engine.dialect.name != "postgresql":
+        return
+
+    defaults = {
+        "categories": '["Vegetables","Fruits","Grains & Cereals","Legumes","Dairy","Other"]',
+        "counties": '["Kiambu","Nakuru","Meru","Kisii","Uasin Gishu","Nyandarua","Kirinyaga"]',
+        "marketplace_enabled": "true",
+        "farm_applications_enabled": "true",
+    }
+    with engine.begin() as connection:
+        for setting_key, setting_value in defaults.items():
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO marketplace_settings (setting_key, setting_value)
+                    VALUES (:setting_key, :setting_value)
+                    ON CONFLICT (setting_key) DO NOTHING
+                    """
+                ),
+                {"setting_key": setting_key, "setting_value": setting_value},
+            )
+
+
+initialize_postgresql_marketplace_settings()
 app = FastAPI(title="Mkulima Connect API")
 app.add_middleware(
     CORSMiddleware,
