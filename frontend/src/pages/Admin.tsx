@@ -91,6 +91,7 @@ const formatFarmBoundary = (value: string) => {
 export default function Admin() {
   const { t } = useTranslation();
   const [section, setSection] = useState<AdminSection>("overview");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [farms, setFarms] = useState<AdminFarm[]>([]);
   const [farmers, setFarmers] = useState<FarmerAccount[]>([]);
@@ -461,18 +462,39 @@ export default function Admin() {
           </p>
         </div>
       </header>
-      <nav className="admin-nav" aria-label="Admin sections">
-        {sections.map((item) => (
-          <button
-            key={item.id}
-            className={section === item.id ? "on" : ""}
-            type="button"
-            onClick={() => setSection(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+      <div className="admin-menu">
+        <button
+          className="menu-toggle admin-menu-toggle"
+          type="button"
+          aria-label={menuOpen ? "Close admin menu" : "Open admin menu"}
+          aria-expanded={menuOpen}
+          aria-controls="admin-sections"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <span />
+          <span />
+          <span />
+          <strong>{sections.find((item) => item.id === section)?.label}</strong>
+        </button>
+        {menuOpen && (
+          <nav className="admin-nav" id="admin-sections" aria-label="Admin sections">
+            {sections.map((item) => (
+              <button
+                key={item.id}
+                className={section === item.id ? "on" : ""}
+                type="button"
+                aria-current={section === item.id ? "page" : undefined}
+                onClick={() => {
+                  setSection(item.id);
+                  setMenuOpen(false);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        )}
+      </div>
       {error && <p className="notice error">{error}</p>}
 
       {section === "overview" && overview && (

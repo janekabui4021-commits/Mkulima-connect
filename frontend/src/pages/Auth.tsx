@@ -4,6 +4,7 @@ import { ShieldCheck, ShoppingBasket, Sprout } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   confirmPasswordReset,
+  bootstrapAdminAccount,
   loginAccount,
   registerAccount,
   requestPasswordReset,
@@ -65,6 +66,7 @@ export default function Auth({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [bootstrapToken, setBootstrapToken] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [resetRequested, setResetRequested] = useState(false);
@@ -110,6 +112,16 @@ export default function Auth({
           );
         }
         finish(session);
+      } else if (loginRole === "admin") {
+        finish(
+          await bootstrapAdminAccount({
+            name,
+            email,
+            phone,
+            password,
+            bootstrap_token: bootstrapToken,
+          }),
+        );
       } else {
         const account = { name, email, phone, password };
         finish(await registerAccount({ ...account, role }));
@@ -184,9 +196,11 @@ export default function Auth({
                         ? "Enter the code sent to your email and choose a new password."
                         : "Enter your account email. We will email you a recovery code if it matches.",
                     )
-                  : role === "buyer"
-                  ? t("Create a buyer account to discover produce, place orders, and connect with farms.")
-                  : t("Create a farmer account, verify your phone, and submit GPS and video farm evidence to unlock provisional listings.")}
+                  : loginRole === "admin"
+                    ? t("Create the designated administrator account using the bootstrap token configured by the site owner.")
+                    : role === "buyer"
+                    ? t("Create a buyer account to discover produce, place orders, and connect with farms.")
+                    : t("Create a farmer account, verify your phone, and submit GPS and video farm evidence to unlock provisional listings.")}
             </p>
           </div>
           {error && <p className="notice error">{error}</p>}
@@ -215,7 +229,7 @@ export default function Auth({
                 ))}
               </fieldset>
             )}
-            {mode === "register" && (
+            {mode === "register" && loginRole !== "admin" && (
               <fieldset className="auth-role-picker register-role-picker">
                 <legend>{t("Choose your account type")}</legend>
                 {signupRoles.map((option) => (
@@ -263,6 +277,18 @@ export default function Auth({
                   />
                 </label>
               </>
+            )}
+            {mode === "register" && loginRole === "admin" && (
+              <label className="form-field">
+                {t("Admin bootstrap token")}
+                <input
+                  required
+                  type="password"
+                  autoComplete="off"
+                  value={bootstrapToken}
+                  onChange={(event) => setBootstrapToken(event.target.value)}
+                />
+              </label>
             )}
             <label className="form-field">
               {t("Email")}
@@ -331,8 +357,14 @@ export default function Auth({
                 : mode === "login"
                   ? t("Sign in")
                   : mode === "register"
-                    ? t(role === "buyer" ? "Create buyer account" : "Create farmer account")
-                    : t(resetRequested ? "Reset password" : "Send recovery code")}
+                        ? t(
+                            loginRole === "admin"
+                              ? "Create admin account"
+                              : role === "buyer"
+                                ? "Create buyer account"
+                                : "Create farmer account",
+                          )
+                        : t(resetRequested ? "Reset password" : "Send recovery code")}
             </button>
           </form>
           {mode === "login" && (
@@ -350,11 +382,11 @@ export default function Auth({
               </button>
             </p>
           )}
-          {mode !== "register" && (mode === "reset" || loginRole !== "admin") && (
+          {mode !== "register" && (
             <p className="auth-signup-prompt">
               <>
                 {mode === "login"
-                  ? t("New to Mkulima Connect?")
+                  ? t(loginRole === "admin" ? "Need an admin account?" : "New to Mkulima Connect?")
                   : t("Remembered your password?")}{" "}
                 <button
                   type="button"
@@ -368,7 +400,13 @@ export default function Auth({
                     }
                   }}
                 >
-                  {t(mode === "login" ? "Create an account" : "Sign in")}
+                  {t(
+                    mode === "login"
+                      ? loginRole === "admin"
+                        ? "Create admin account"
+                        : "Create an account"
+                      : "Sign in",
+                  )}
                 </button>
               </>
             </p>
